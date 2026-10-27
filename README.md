@@ -50,7 +50,7 @@ You can build Quran from the command line by running `./gradlew assembleMadaniDe
 
 Choose "Import Project," and choose the `build.gradle` file from the top level directory. Under "Build Variants" (a tab on the left side), choose "madaniDebug."
 
-## Using Quran for Android code in other projects 
+## Using Quran for Android code in other projects
 
 The intention behind open sourcing Quran for Android is two fold - first, to allow developers to help contribute to the app, thus speeding up the development of new features and ideas. Second, to give back to the community and serve as a code reference.
 
