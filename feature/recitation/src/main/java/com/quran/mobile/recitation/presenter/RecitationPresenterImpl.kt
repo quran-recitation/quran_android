@@ -23,6 +23,7 @@ import com.quran.recitation.tracking.FollowerConfig
 import com.quran.recitation.tracking.PhonemeFollower
 import com.quran.recitation.tracking.RecitationPhonemes
 import com.quran.recitation.tracking.RecitationText
+import com.quran.recitation.tracking.SuraInput
 import com.quran.recitation.tracking.ZipformerModel
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
@@ -268,8 +269,30 @@ class RecitationPresenterImpl @Inject constructor(
   ) {
     activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     listening.start(
-      activity, phonemes, ayahs, startWord, openings, from,
-      FollowerConfig(),
+      activity, phonemes, ayahs, startWord, openings, from, FollowerConfig(),
+    ) { finishedSura ->
+      nextSuraInput(finishedSura)
+    }
+  }
+
+  /**
+   * The sura to carry straight on into once [finishedSura] is done, so the reader is not stopped at
+   * the end of a sura; null at the end of the mushaf or when the sura's text is unavailable, which
+   * stops the session. Starts the next sura's progress and turns the page to it.
+   */
+  private suspend fun nextSuraInput(finishedSura: Int): SuraInput? {
+    val activity = activity ?: return null
+    val next = finishedSura + 1
+    if (next > LAST_SURA) return null
+    val progress = newSession(activity, SuraAyah(next, 1)) ?: return null
+    eventPresenter.onRecitationChange(SuraAyah(next, 1))
+    val openings = RecitationPhonemes.openings(activity, next)
+    return SuraInput(
+      sura = next,
+      phonemes = progress.words.map { it.phonemes },
+      ayahs = progress.words.map { it.word.ayah.ayah },
+      startWord = 0,
+      openings = openings,
     )
   }
 
@@ -311,5 +334,6 @@ class RecitationPresenterImpl @Inject constructor(
     const val REQUEST_AUDIO = 4201
     const val PREFERENCES = "recitation_mushaf"
     const val KEY_HIDE = "hide_unrecited"
+    const val LAST_SURA = 114
   }
 }

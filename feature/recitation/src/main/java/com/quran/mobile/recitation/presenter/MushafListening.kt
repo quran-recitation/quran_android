@@ -11,13 +11,16 @@ import com.quran.recitation.tracking.FollowerConfig
 import com.quran.recitation.tracking.LivePhonemeRecitation
 import com.quran.recitation.tracking.PhonemeFollower
 import com.quran.recitation.tracking.PhonemeRecognizerFactory
+import com.quran.recitation.tracking.SuraInput
 import com.quran.recitation.tracking.ZipformerModel
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Hears the reader through the microphone and follows them on the mushaf, updating
@@ -47,6 +50,8 @@ class MushafListening @Inject constructor(
     openings: List<List<String>>,
     from: SuraAyah,
     config: FollowerConfig,
+    /** The sura to follow once a sura is finished (the reader carries on), or null to stop there. */
+    nextSura: suspend (finishedSura: Int) -> SuraInput?,
   ) {
     val app = context.applicationContext
     state.setListening(true)
@@ -57,12 +62,16 @@ class MushafListening @Inject constructor(
       try {
         val recitation = LivePhonemeRecitation(
           recognizerFactory, ZipformerModel.file(app), ZipformerModel.tokens(app),
-          phonemes, ayahs, startWord, openings, config,
+          phonemes, ayahs, startWord, openings, from.sura, config,
         )
         recitation.run(
           onListening = { toast(app, app.getString(R.string.recitation_listening, from.ayah)) },
-          onUpdate = { update -> apply(app, update, shownAyah)?.let { shownAyah = it } },
+          onUpdate = { update -> apply(update, shownAyah)?.let { shownAyah = it } },
+          nextSura = { finished -> withContext(Dispatchers.Main) { nextSura(finished) } },
         )
+        // No more suras to follow: the reader finished.
+        toast(app, app.getString(R.string.recitation_sura_complete))
+        stop()
       } catch (e: Exception) {
         if (e !is CancellationException) {
           toast(app, app.getString(R.string.recitation_stopped, e.message))
@@ -82,7 +91,7 @@ class MushafListening @Inject constructor(
   }
 
   /** Applies [update]; returns the ayah the pages were turned to, if they were. */
-  private fun apply(context: Context, update: LivePhonemeRecitation.Update, shownAyah: SuraAyah): SuraAyah? {
+  private fun apply(update: LivePhonemeRecitation.Update, shownAyah: SuraAyah): SuraAyah? {
     state.update { progress ->
       val recited = progress.recited.toHashSet()
       val missed = progress.missed.toHashSet()
@@ -109,10 +118,6 @@ class MushafListening @Inject constructor(
       )
     }
     val progress = state.progress.value ?: return null
-    if (progress.currentWord >= progress.words.size) {
-      toast(context, context.getString(R.string.recitation_sura_complete))
-      stop()
-    }
     // Turn the page once the reader moves on to an ayah on the next one.
     val ayah = progress.currentAyah
     if (ayah != null && ayah != shownAyah) {

@@ -10,9 +10,20 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 
+/** The words of a sura to follow next: their phonemes, each word's ayah, and the opening phrases. */
+class SuraInput(
+  val sura: Int,
+  val phonemes: List<String>,
+  /** The ayah of each word. */
+  val ayahs: List<Int>,
+  val startWord: Int,
+  val openings: List<List<String>>,
+)
+
 /**
  * Follows a reader live: microphone -> [PhonemeRecognizer] -> [PhonemeFollower], in chunks of
- * 480 ms (one step of the streaming model).
+ * 480 ms (one step of the streaming model). When a sura is finished the reader can carry straight
+ * on into the next one (see the nextSura argument of [run]), without reloading the model.
  */
 class LivePhonemeRecitation(
   private val recognizerFactory: PhonemeRecognizerFactory,
@@ -23,6 +34,8 @@ class LivePhonemeRecitation(
   private val ayahs: List<Int>,
   private val startWord: Int,
   private val openings: List<List<String>>,
+  /** The sura being followed first; passed to the nextSura provider when it is finished. */
+  private val sura: Int,
   private val config: FollowerConfig = FollowerConfig(),
 ) {
 
@@ -34,8 +47,15 @@ class LivePhonemeRecitation(
    * each chunk that changed something, both on the main thread.
    */
   @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-  suspend fun run(onListening: () -> Unit, onUpdate: (Update) -> Unit): Unit = withContext(Dispatchers.IO) {
-    val follower = PhonemeFollower(words, ayahs, startWord, openings, config)
+  suspend fun run(
+    onListening: () -> Unit,
+    onUpdate: (Update) -> Unit,
+    /** The sura to follow once the current one is finished, or null to stop there. */
+    nextSura: suspend (finishedSura: Int) -> SuraInput? = { null },
+  ): Unit = withContext(Dispatchers.IO) {
+    var follower = PhonemeFollower(words, ayahs, startWord, openings, config)
+    var currentSura = sura
+    var wordCount = words.size
     recognizerFactory.create(model, tokens, THREADS).use { recognizer ->
       val bufferSize = maxOf(
         AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT),
@@ -72,6 +92,17 @@ class LivePhonemeRecitation(
             shownWord = follower.currentWord
             val update = Update(events, shownWord)
             withContext(Dispatchers.Main) { onUpdate(update) }
+          }
+          // The sura is finished: carry on into the next one if there is one, keeping the
+          // recognizer (and its loaded model) running; otherwise stop.
+          if (follower.currentWord >= wordCount) {
+            val next = nextSura(currentSura) ?: break
+            follower = PhonemeFollower(next.phonemes, next.ayahs, next.startWord, next.openings, config)
+            currentSura = next.sura
+            wordCount = next.phonemes.size
+            recognizer.reset()
+            follower.onRecognizerReset()
+            shownWord = -1
           }
         }
       } finally {
