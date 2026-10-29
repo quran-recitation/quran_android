@@ -273,10 +273,14 @@ class RecitationPresenterImpl @Inject constructor(
     from: SuraAyah,
   ) {
     activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    // The application context, not the activity, so carrying on into the next surah still works
+    // when the reading screen is rebuilt (e.g. the screen is rotated) mid-recitation, which unbinds
+    // this activity-scoped presenter; its data dependencies (text, QuranInfo) are app-scoped.
+    val appContext = activity.applicationContext
     listening.start(
       activity, phonemes, ayahs, startWord, openings, from, FollowerConfig(),
     ) { finishedSura ->
-      nextSurah(finishedSura)
+      nextSurah(appContext, finishedSura)
     }
   }
 
@@ -284,10 +288,9 @@ class RecitationPresenterImpl @Inject constructor(
    * The surah to carry straight on into once [finishedSura] is done, so the reader is not stopped
    * at a surah's end; null at the end of the mushaf or when the surah's text is unavailable, which
    * stops the session. [MushafListening] appends it to the progress, keeping the finished surah's
-   * colouring.
+   * colouring. Uses the application [context] so it survives the reading screen being rebuilt.
    */
-  private suspend fun nextSurah(finishedSura: Int): NextSurah? {
-    val context = activity ?: return null
+  private suspend fun nextSurah(context: Context, finishedSura: Int): NextSurah? {
     val next = finishedSura + 1
     if (next > LAST_SURA) return null
     val (words, pages) = surahContent(context, next) ?: return null
