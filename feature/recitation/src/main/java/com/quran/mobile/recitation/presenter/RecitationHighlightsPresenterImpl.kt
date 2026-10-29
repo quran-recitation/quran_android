@@ -99,25 +99,21 @@ class RecitationHighlightsPresenterImpl @Inject constructor(
   }
 
   /**
-   * The ayahs the reader got wrong: fully passed (every word recited or missed) with at least
-   * [INCORRECT_AYAH_FRACTION] of their words missed; all of their words are shown red. An ayah
-   * still being recited is never one of these, so the colors only settle once the reader has
-   * gone through it; an ayah with fewer words missed keeps its slips orange.
+   * The ayah the reader is being held in to re-read; its words are shown red until re-recited. The
+   * follower sends the reader back into an ayah it judged wrong (too many words missed), so the
+   * word expected next ends up inside an ayah whose words are all already marked (recited or
+   * missed) — which never happens while first reciting an ayah (the word expected next is still
+   * unmarked there). An ayah the reader has moved on from is not one of these, so its slips stay
+   * orange. Keying the red off the hold (rather than re-counting the missed fraction each redraw)
+   * keeps a re-recited ayah's not-yet-reached words red, instead of flipping them to orange once
+   * enough were corrected.
    */
   private fun incorrectAyahs(progress: MushafRecitationProgress): Set<SuraAyah> {
-    val total = LinkedHashMap<SuraAyah, Int>()
-    val marked = HashMap<SuraAyah, Int>()
-    val missed = HashMap<SuraAyah, Int>()
-    progress.words.forEachIndexed { index, word ->
-      val ayah = word.word.ayah
-      total[ayah] = (total[ayah] ?: 0) + 1
-      if (index in progress.recited || index in progress.missed) marked[ayah] = (marked[ayah] ?: 0) + 1
-      if (index in progress.missed) missed[ayah] = (missed[ayah] ?: 0) + 1
-    }
-    return total.keys.filterTo(HashSet()) { ayah ->
-      val count = total.getValue(ayah)
-      marked[ayah] == count && (missed[ayah] ?: 0) >= count * INCORRECT_AYAH_FRACTION
-    }
+    val current = progress.words.getOrNull(progress.currentWord)?.word?.ayah ?: return emptySet()
+    val heldInCurrent = progress.words.withIndex()
+      .filter { it.value.word.ayah == current }
+      .all { it.index in progress.recited || it.index in progress.missed }
+    return if (heldInCurrent) setOf(current) else emptySet()
   }
 
   /** [scroll]: keep the word on the screen (pages taller than it scroll to follow the reader). */
@@ -134,12 +130,6 @@ class RecitationHighlightsPresenterImpl @Inject constructor(
   companion object {
     /** Whether a letter recited with the wrong vowel is shown (cyan). Kept but disabled for now. */
     private const val SHOW_WRONG_VOWELS = false
-    /**
-     * An ayah, once fully passed, with at least this fraction of its words missed is wrong (red).
-     * Matches FollowerConfig.incorrectAyahFraction so the ayah shown red is the one the follower
-     * holds the reader at.
-     */
-    private const val INCORRECT_AYAH_FRACTION = 0.30
 
     // Ids after the app's own highlight types (selection, audio, bookmarks, colors, reading bookmarks).
     val RECITED = HighlightType(
