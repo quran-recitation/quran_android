@@ -149,7 +149,7 @@ class PagerActivityRecitationPresenter @Inject constructor(
   }
 
   override fun onRecitationLongPressed() {
-    recitationPresenter.startOrStopRecitation({ ayahToStartFrom() }, true)
+    recitationPresenter.startOrStopRecitation({ ayahToStartFrom() })
   }
 
   override fun onRecitationTranscriptPressed() {

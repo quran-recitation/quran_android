@@ -2,10 +2,6 @@
 <resources>
   <!-- following a recitation on the mushaf pages -->
   <string name="recitation_microphone_needed">Microphone permission is needed for memorization review.</string>
-  <string name="recitation_strictness_title">How strictly words are checked</string>
-  <string name="recitation_strictness_easy">Easy</string>
-  <string name="recitation_strictness_normal">Normal</string>
-  <string name="recitation_strictness_strict">Strict</string>
   <string name="recitation_model_title">Memorization review</string>
   <string name="recitation_model_offer">Memorization review needs a recitation model (%1$s), which runs on this device.\n\nDownload it now?</string>
   <string name="recitation_model_download">Download</string>

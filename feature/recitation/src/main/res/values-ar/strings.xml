@@ -1,10 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
   <string name="recitation_microphone_needed">يلزم إذن الميكروفون لمراجعة الحفظ.</string>
-  <string name="recitation_strictness_title">مدى دقة التحقق من الكلمات</string>
-  <string name="recitation_strictness_easy">سهل</string>
-  <string name="recitation_strictness_normal">عادي</string>
-  <string name="recitation_strictness_strict">صارم</string>
   <string name="recitation_model_title">مراجعة الحفظ</string>
   <string name="recitation_model_offer">تحتاج مراجعة الحفظ إلى ملفات للتعرّف على التلاوة (%1$s) تعمل على هذا الجهاز.\n\nهل تريد تنزيلها الآن؟</string>
   <string name="recitation_model_download">تنزيل</string>

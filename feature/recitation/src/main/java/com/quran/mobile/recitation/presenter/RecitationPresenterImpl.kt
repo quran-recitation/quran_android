@@ -9,7 +9,6 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.WindowManager
 import android.widget.Toast
-import androidx.annotation.StringRes
 import com.quran.data.core.QuranInfo
 import com.quran.data.di.QuranScope
 import com.quran.data.model.AyahWord
@@ -43,7 +42,7 @@ import java.util.UUID
  *
  * The microphone button starts from the selected ayah or the top of the page and stops again; the
  * session and its highlights stay until it is closed. Starting again on the page the reader
- * stopped on carries on from their ayah. A long press chooses how strictly words are checked.
+ * stopped on carries on from their ayah.
  */
 @QuranScope
 class RecitationPresenterImpl @Inject constructor(
@@ -110,12 +109,8 @@ class RecitationPresenterImpl @Inject constructor(
   override fun isRecitationEnabled(): Boolean = true
   override fun isRecitationEnabledFlow(): StateFlow<Boolean> = enabled
 
-  override fun startOrStopRecitation(startAyah: () -> SuraAyah, showModeSelection: Boolean) {
+  override fun startOrStopRecitation(startAyah: () -> SuraAyah) {
     val activity = activity ?: return
-    if (showModeSelection) {
-      chooseStrictness(activity)
-      return
-    }
     if (listening.isListening) {
       stopListening()
       return
@@ -148,23 +143,6 @@ class RecitationPresenterImpl @Inject constructor(
     stopListening()
     state.clear()
     eventPresenter.onRecitationSessionChange(null)
-  }
-
-  private fun chooseStrictness(activity: Activity) {
-    val preferences = activity.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
-    dialog = AlertDialog.Builder(activity)
-      .setTitle(R.string.recitation_strictness_title)
-      .setSingleChoiceItems(Strictness.entries.map { activity.getString(it.label) }.toTypedArray(), strictness(activity).ordinal) { chosen, which ->
-        preferences.edit().putString(KEY_STRICTNESS, Strictness.entries[which].name).apply()
-        chosen.dismiss()
-      }
-      .setNegativeButton(R.string.recitation_cancel, null)
-      .show()
-  }
-
-  private fun strictness(context: Context): Strictness {
-    val name = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).getString(KEY_STRICTNESS, null)
-    return Strictness.entries.firstOrNull { it.name == name } ?: Strictness.NORMAL
   }
 
   private fun offerDownload(activity: Activity, ayah: SuraAyah) {
@@ -291,7 +269,7 @@ class RecitationPresenterImpl @Inject constructor(
     activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     listening.start(
       activity, phonemes, ayahs, startWord, openings, from,
-      FollowerConfig(maxWordCost = strictness(activity).maxWordCost),
+      FollowerConfig(),
     )
   }
 
@@ -313,13 +291,6 @@ class RecitationPresenterImpl @Inject constructor(
     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
   }
 
-  /** How close a recited word must be to count as recited (average cost per phoneme). */
-  private enum class Strictness(@StringRes val label: Int, val maxWordCost: Double) {
-    EASY(R.string.recitation_strictness_easy, 0.5),
-    NORMAL(R.string.recitation_strictness_normal, 0.35),
-    STRICT(R.string.recitation_strictness_strict, 0.25),
-  }
-
   private class MushafSession(
     private val start: SuraAyah,
     private val state: MushafRecitationState,
@@ -339,7 +310,6 @@ class RecitationPresenterImpl @Inject constructor(
   private companion object {
     const val REQUEST_AUDIO = 4201
     const val PREFERENCES = "recitation_mushaf"
-    const val KEY_STRICTNESS = "strictness"
     const val KEY_HIDE = "hide_unrecited"
   }
 }

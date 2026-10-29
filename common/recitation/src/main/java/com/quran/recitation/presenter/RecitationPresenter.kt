@@ -13,7 +13,7 @@ interface RecitationPresenter : Presenter<Activity> {
   fun isRecitationEnabledFlow(): StateFlow<Boolean>
   fun onRequestPermissionsResult(requestCode: Int, grantResults: IntArray)
 
-  fun startOrStopRecitation(startAyah: () -> SuraAyah, showModeSelection: Boolean = false)
+  fun startOrStopRecitation(startAyah: () -> SuraAyah)
   fun endSession()
 
 }
