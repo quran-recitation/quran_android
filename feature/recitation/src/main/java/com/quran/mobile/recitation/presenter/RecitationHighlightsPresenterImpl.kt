@@ -17,10 +17,12 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
 /**
- * Shows the recitation session on a mushaf page: recited words turn green (cyan with a wrong
- * vowel), words passed without being said right red, the word the reader is on is highlighted, and words not yet recited can
+ * Shows the recitation session on a mushaf page: recited words turn green, a word slipped within
+ * an otherwise-recited ayah orange, and every word of an ayah the reader got wrong (see
+ * [incorrectAyahs]) red. The word the reader is on is highlighted, and words not yet recited can
  * be hidden (keeping the ayah numbers). Pages taller than the screen scroll to keep the word the
- * reader is on in view.
+ * reader is on in view. (Vowel-mistake highlighting, cyan, is kept but disabled; see
+ * SHOW_WRONG_VOWELS.)
  *
  * Word highlights need the page's word coordinates (see AyahInfoDatabaseHandler).
  */
@@ -66,15 +68,20 @@ class RecitationHighlightsPresenterImpl @Inject constructor(
   }
 
   private fun highlightsFor(progress: MushafRecitationProgress, pages: Set<Int>): List<HighlightInfo> {
+    val incorrectAyahs = incorrectAyahs(progress)
     val result = ArrayList<HighlightInfo>()
     progress.words.forEachIndexed { index, word ->
       if (progress.pages[index] !in pages) return@forEachIndexed
       val ayah = word.word.ayah
       val position = word.word.wordPosition
       when {
-        index in progress.wrongVowels -> result += highlight(ayah, position, WRONG_VOWEL)
+        // Vowel-mistake (cyan) highlighting is disabled; see SHOW_WRONG_VOWELS.
+        SHOW_WRONG_VOWELS && index in progress.wrongVowels -> result += highlight(ayah, position, WRONG_VOWEL)
+        // A whole ayah the reader got wrong is red, every word of it.
+        ayah in incorrectAyahs -> result += highlight(ayah, position, MISSED)
         index in progress.recited -> result += highlight(ayah, position, RECITED)
-        index in progress.missed -> result += highlight(ayah, position, MISSED)
+        // A word slipped within an otherwise-recited ayah is orange, not red.
+        index in progress.missed -> result += highlight(ayah, position, WRONG_WORD)
         // Word by word, so the ayah numbers stay visible as landmarks.
         progress.hideUnrecited && index >= progress.start ->
           result += highlight(ayah, position, HIDDEN, scroll = index == progress.currentWord)
@@ -82,6 +89,28 @@ class RecitationHighlightsPresenterImpl @Inject constructor(
       }
     }
     return result
+  }
+
+  /**
+   * The ayahs the reader got wrong: fully passed (every word recited or missed) with at least
+   * [INCORRECT_AYAH_FRACTION] of their words missed; all of their words are shown red. An ayah
+   * still being recited is never one of these, so the colors only settle once the reader has
+   * gone through it; an ayah with fewer words missed keeps its slips orange.
+   */
+  private fun incorrectAyahs(progress: MushafRecitationProgress): Set<SuraAyah> {
+    val total = LinkedHashMap<SuraAyah, Int>()
+    val marked = HashMap<SuraAyah, Int>()
+    val missed = HashMap<SuraAyah, Int>()
+    progress.words.forEachIndexed { index, word ->
+      val ayah = word.word.ayah
+      total[ayah] = (total[ayah] ?: 0) + 1
+      if (index in progress.recited || index in progress.missed) marked[ayah] = (marked[ayah] ?: 0) + 1
+      if (index in progress.missed) missed[ayah] = (missed[ayah] ?: 0) + 1
+    }
+    return total.keys.filterTo(HashSet()) { ayah ->
+      val count = total.getValue(ayah)
+      marked[ayah] == count && (missed[ayah] ?: 0) >= count * INCORRECT_AYAH_FRACTION
+    }
   }
 
   /** [scroll]: keep the word on the screen (pages taller than it scroll to follow the reader). */
@@ -96,6 +125,11 @@ class RecitationHighlightsPresenterImpl @Inject constructor(
     }
 
   companion object {
+    /** Whether a letter recited with the wrong vowel is shown (cyan). Kept but disabled for now. */
+    private const val SHOW_WRONG_VOWELS = false
+    /** An ayah, once fully passed, with at least this fraction of its words missed is wrong (red). */
+    private const val INCORRECT_AYAH_FRACTION = 0.30
+
     // Ids after the app's own highlight types (selection, audio, bookmarks, colors, reading bookmarks).
     val RECITED = HighlightType(
       41, R.color.recitation_recited, Mode.COLOR, nightColorResId = R.color.recitation_recited_night,
@@ -108,7 +142,10 @@ class RecitationHighlightsPresenterImpl @Inject constructor(
     val WRONG_VOWEL = HighlightType(
       45, R.color.recitation_wrong_vowel, Mode.COLOR, nightColorResId = R.color.recitation_wrong_vowel_night,
     )
+    val WRONG_WORD = HighlightType(
+      46, R.color.recitation_wrong_word, Mode.COLOR, nightColorResId = R.color.recitation_wrong_word_night,
+    )
 
-    private val TYPES = listOf(RECITED, WRONG_VOWEL, MISSED, HIDDEN, CURRENT_WORD)
+    private val TYPES = listOf(RECITED, WRONG_VOWEL, WRONG_WORD, MISSED, HIDDEN, CURRENT_WORD)
   }
 }
