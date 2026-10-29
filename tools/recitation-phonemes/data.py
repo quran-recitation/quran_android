@@ -1,7 +1,7 @@
-"""Quran text, reciter audio and reference word timings for evaluating recitation tracking.
+"""Reciter audio and reference word timings for building PhonemeFollowerTest fixtures.
 
 Everything is downloaded from the same servers Quran Android uses and cached under the data
-directory (SPIKE_DATA, default ./data).
+directory (RECITATION_DATA, default ./data).
 """
 import os
 import sqlite3
@@ -13,21 +13,15 @@ from pathlib import Path
 
 import numpy as np
 
-DATA = Path(os.environ.get("SPIKE_DATA", "data"))
+DATA = Path(os.environ.get("RECITATION_DATA", "data"))
 DATABASES_URL = "https://android.quran.com/data/databases/"
 SAMPLE_RATE = 16000
 
 QURANICAUDIO_URL = "https://download.quranicaudio.com/quran/"
-# Reciters with gapless audio and word-level timings (timings "words" column), used to evaluate.
+# Reciters with gapless audio and word-level timings (timings "words" column).
 RECITERS = {
   "minshawi_murattal": QURANICAUDIO_URL + "muhammad_siddeeq_al-minshaawee/",
 }
-# Further gapless reciters (no word timings), used as distillation training audio.
-TRAINING_RECITERS = [
-  "mishaari_raashid_al_3afaasee", "abdul_basit_murattal", "mahmood_khaleel_al-husaree",
-  "sa3d_al-ghaamidi/complete", "abdurrahmaan_as-sudays", "maher_almu3aiqly/year1440",
-  "muhammad_ayyoob", "ahmed_ibn_3ali_al-3ajamy",
-]
 
 
 @dataclass

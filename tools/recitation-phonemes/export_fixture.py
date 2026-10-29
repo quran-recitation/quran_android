@@ -1,28 +1,29 @@
 """Records what the recognizer hears of a recitation, for PhonemeFollowerTest.
 
-  python export_fixture.py SPIKE_DIR MODEL_DIR OUT.txt --sura 67 [--ayahs 1 10] [--drop 2] [--repeat 2]
-  python export_fixture.py SPIKE_DIR MODEL_DIR OUT.txt --sura 67 --order 1 2 4 3 4 5 20:115
+  python export_fixture.py MODEL_DIR OUT.txt --sura 67 [--ayahs 1 10] [--drop 2] [--repeat 2]
+  python export_fixture.py MODEL_DIR OUT.txt --sura 67 --order 1 2 4 3 4 5 20:115
 
-SPIKE_DIR is tools/recitation-spike, for Minshawi's recitation and its word timings. MODEL_DIR
-holds Quran-Lab's zipformer_p_arabic_v3.1.int8.onnx (or another version) and its tokens.txt, run with sherpa-onnx as the
-app runs it (480 ms chunks after 480 ms of silence). --drop leaves an ayah out, --repeat recites
-it twice; --order recites the ayahs given, in that order (SURA:AYAH for another sura's).
+Minshawi's recitation and its word timings are downloaded and cached by data.py (see
+RECITATION_DATA). MODEL_DIR holds Quran-Lab's zipformer_p_arabic_v3.1.int8.onnx (or another
+version) and its tokens.txt, run with sherpa-onnx as the app runs it (480 ms chunks after 480 ms
+of silence). --drop leaves an ayah out, --repeat recites it twice; --order recites the ayahs
+given, in that order (SURA:AYAH for another sura's).
 
 Each output line is the recognizer's tokens after one chunk: how many of the previous line's
 tokens it keeps, then its other tokens (space separated). The first line is "sura first_ayah".
 """
 import argparse
 import glob
-import sys
 import numpy as np
 import sherpa_onnx
+
+from data import SAMPLE_RATE, sura_audio, sura_words
 
 CHUNK = 7680
 
 
 def main():
   parser = argparse.ArgumentParser()
-  parser.add_argument("spike_dir")
   parser.add_argument("model_dir")
   parser.add_argument("out")
   parser.add_argument("--sura", type=int, required=True)
@@ -31,8 +32,6 @@ def main():
   parser.add_argument("--repeat", type=int)
   parser.add_argument("--order", nargs="+")
   args = parser.parse_args()
-  sys.path.insert(0, args.spike_dir)
-  from spike.data import SAMPLE_RATE, sura_audio, sura_words
 
   audio = {args.sura: sura_audio(args.sura)}
   words = {args.sura: sura_words(args.sura)}
