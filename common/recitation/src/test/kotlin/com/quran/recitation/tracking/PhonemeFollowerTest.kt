@@ -76,6 +76,14 @@ class PhonemeFollowerTest {
   }
 
   @Test
+  fun `follows al-Ikhlas to its end`() {
+    val replay = replay("ikhlas.txt")
+    assertThat(replay.missed).isEmpty()
+    assertThat(replay.recited).containsExactlyElementsIn(replay.ayahOf.indices)
+    assertThat(replay.currentWord).isEqualTo(replay.ayahOf.size)
+  }
+
+  @Test
   fun `follows al-Mulk word by word`() {
     val replay = replay("mulk.txt")
     val ayahs1To10 = (1..10).flatMap(replay::ayahWords)
