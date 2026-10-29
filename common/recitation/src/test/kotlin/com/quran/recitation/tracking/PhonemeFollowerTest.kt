@@ -197,4 +197,35 @@ class PhonemeFollowerTest {
     assertThat(replay.missed).isEmpty()
     assertThat(replay.wrongVowels).containsExactly(replaced)
   }
+
+  /**
+   * The ayah chosen to start at is a hard start: al-Kahf begun at ayah 18, but with ayah 17 recited
+   * first. The earlier ayah is not followed back into, while ayah 18 is then tracked as normal.
+   */
+  @Test
+  fun `the ayah chosen to start at is a hard start`() {
+    val sura = 18
+    val ayahs = generateSequence(1) { it + 1 }.map { phonemes["$sura:$it"] }.takeWhile { it != null }.filterNotNull().toList()
+    val words = ayahs.flatten()
+    val ayahOf = ayahs.flatMapIndexed { i, w -> List(w.size) { i + 1 } }
+    val openings = listOfNotNull(phonemes["istiadha"], phonemes["basmala"])
+    val follower = PhonemeFollower(words, ayahOf, ayahOf.indexOf(18), openings)
+    val recited = sortedSetOf<Int>()
+    val tokens = ArrayList<String>()
+    fun recite(ayah: Int) {
+      for (i in ayahOf.indices.filter { ayahOf[it] == ayah }) {
+        tokens += words[i]
+        for (event in follower.accept(tokens)) when (event) {
+          is PhonemeFollower.Event.Recited -> recited += event.word
+          is PhonemeFollower.Event.Missed -> recited -= event.word
+        }
+      }
+    }
+    recite(17) // the ayah before the one started at
+    recite(18)
+    val ayah17 = ayahOf.indices.filter { ayahOf[it] == 17 }
+    val ayah18 = ayahOf.indices.filter { ayahOf[it] == 18 }
+    assertThat(recited.intersect(ayah17.toSet())).isEmpty()
+    assertThat(recited).containsAtLeastElementsIn(ayah18)
+  }
 }

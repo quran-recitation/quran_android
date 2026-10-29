@@ -45,7 +45,8 @@ data class FollowerConfig(
  * reader is at the cheapest position. Before they start, phonemes are noise or one of the
  * [openings] (isti'adha, basmala), which they may say or skip; from any position
  * they may go back to the start of an earlier word or ahead to the start of a later one, at a
- * fixed cost, so repeats and skips are followed.
+ * fixed cost, so repeats and skips are followed. They are not followed back before [startWord]
+ * (the ayah they chose to begin at), so reciting an earlier ayah does not pull the session back.
  *
  * When the reader moves past a word, it is checked against what was heard while they were on it:
  * close enough and it is [Event.Recited] (noting any letter heard with another vowel than its own),
@@ -107,7 +108,9 @@ class PhonemeFollower(
   private var cost = DoubleArray(positions) { INFINITY }
   private var next = DoubleArray(positions)
   private var noise = 0.0
-  private val startPosition = wordStarts[startWord.coerceIn(0, words.size)]
+  // The word the reader chose to begin at; they are not followed back before it.
+  private val startFloor = startWord.coerceIn(0, words.size)
+  private val startPosition = wordStarts[startFloor]
 
   // Where an opening phrase starts and ends; after one, the reader may say a later one or start.
   private val phraseStarts = IntArray(openingPhrases.size)
@@ -234,8 +237,12 @@ class PhonemeFollower(
     var w = 0
     for (j in suraOffset until positions) {
       if (w < words.size && j == wordStarts[w]) {
-        val jumped = before + config.jumpAheadCost
-        if (jumped < now[j]) now[j] = jumped
+        // Not before the start word: the reader can't be placed before the ayah they chose, so an
+        // earlier ayah (ahead of the openings but behind the start) is not jumped into either.
+        if (w >= startFloor) {
+          val jumped = before + config.jumpAheadCost
+          if (jumped < now[j]) now[j] = jumped
+        }
         w++
       }
       if (now[j] < before) before = now[j]
@@ -245,8 +252,12 @@ class PhonemeFollower(
     w = words.size - 1
     for (j in positions - 1 downTo suraOffset) {
       if (w >= 0 && j == wordStarts[w]) {
-        val jumped = after + config.jumpBackCost
-        if (jumped < now[j]) now[j] = jumped
+        // Not before the word the reader chose to begin at: a selected ayah is a hard start, so
+        // reciting an earlier ayah is not followed back there.
+        if (w >= startFloor) {
+          val jumped = after + config.jumpBackCost
+          if (jumped < now[j]) now[j] = jumped
+        }
         w--
       }
       if (now[j] < after) after = now[j]
@@ -319,8 +330,9 @@ class PhonemeFollower(
   private fun goBack(word: Int) {
     againInRow = 0
     // The jump back is clear only some way into the repeat (repeated passages often start
-    // alike): the last few words before it may already have been said again.
-    val from = maxOf(0, word - JUMP_LOOKBACK)
+    // alike): the last few words before it may already have been said again. Not before the start
+    // word, though: words earlier than the ayah the reader chose are never marked.
+    val from = maxOf(startFloor, word - JUMP_LOOKBACK)
     val recent = (from until word).sumOf { words[it].length } * 2 + MARGIN
     for (w in from until minOf(word, currentWord)) {
       check(w, heardCount - recent, margin = 0)?.let(::recitedAgain)
