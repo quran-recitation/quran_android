@@ -22,10 +22,22 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** A surah to carry on into: its words (appended to the progress), the page of each, and its openings. */
+class NextSurah(
+  val sura: Int,
+  val words: List<MushafWord>,
+  val pages: List<Int>,
+  val openings: List<List<String>>,
+)
+
 /**
  * Hears the reader through the microphone and follows them on the mushaf, updating
  * [MushafRecitationState] and turning the pages. It is kept by the app rather than the reading
  * screen, so it carries on when the screen is rebuilt (turned between portrait and landscape).
+ *
+ * When a surah is finished the reader carries on into the next one: its words are appended to the
+ * progress (so the finished surah keeps its colouring) and [base] marks where they begin, since the
+ * follower numbers each surah's words from 0.
  */
 @SingleIn(AppScope::class)
 class MushafListening @Inject constructor(
@@ -35,6 +47,10 @@ class MushafListening @Inject constructor(
 ) {
   private val scope = MainScope()
   private var job: Job? = null
+
+  // Where the current surah's words begin in the combined progress; the follower numbers each
+  // surah's words from 0, so its word indices are shifted by this (see [apply] and [advance]).
+  private var base = 0
 
   val isListening: Boolean get() = job?.isActive == true
 
@@ -50,10 +66,11 @@ class MushafListening @Inject constructor(
     openings: List<List<String>>,
     from: SuraAyah,
     config: FollowerConfig,
-    /** The sura to follow once a sura is finished (the reader carries on), or null to stop there. */
-    nextSura: suspend (finishedSura: Int) -> SuraInput?,
+    /** The surah to carry on into once a surah is finished, or null to stop there. */
+    nextSurah: suspend (finishedSura: Int) -> NextSurah?,
   ) {
     val app = context.applicationContext
+    base = 0
     state.setListening(true)
     eventPresenter.onListeningStateChange(true)
     eventPresenter.onRecitationChange(from)
@@ -67,7 +84,7 @@ class MushafListening @Inject constructor(
         recitation.run(
           onListening = { toast(app, app.getString(R.string.recitation_listening, from.ayah)) },
           onUpdate = { update -> apply(update, shownAyah)?.let { shownAyah = it } },
-          nextSura = { finished -> withContext(Dispatchers.Main) { nextSura(finished) } },
+          nextSura = { finished -> withContext(Dispatchers.Main) { nextSurah(finished)?.let { advance(it) } } },
         )
         // No more suras to follow: the reader finished.
         toast(app, app.getString(R.string.recitation_sura_complete))
@@ -90,6 +107,32 @@ class MushafListening @Inject constructor(
     if (wasListening) onStopped?.invoke()
   }
 
+  /**
+   * Carries the progress on into [next]'s surah: appends its words (so the finished surah keeps its
+   * colouring) and turns the page to it, and returns its words for the follower. Sets [base] to
+   * where the surah begins in the combined progress, since the follower numbers its words from 0.
+   */
+  private fun advance(next: NextSurah): SuraInput {
+    val start = state.progress.value?.words?.size ?: 0
+    base = start
+    state.update { progress ->
+      progress.copy(
+        words = progress.words + next.words,
+        pages = progress.pages + next.pages,
+        start = start,
+        currentWord = start,
+      )
+    }
+    eventPresenter.onRecitationChange(next.words.first().word.ayah)
+    return SuraInput(
+      next.sura,
+      next.words.map { it.phonemes },
+      next.words.map { it.word.ayah.ayah },
+      0,
+      next.openings,
+    )
+  }
+
   /** Applies [update]; returns the ayah the pages were turned to, if they were. */
   private fun apply(update: LivePhonemeRecitation.Update, shownAyah: SuraAyah): SuraAyah? {
     state.update { progress ->
@@ -97,21 +140,24 @@ class MushafListening @Inject constructor(
       val missed = progress.missed.toHashSet()
       val wrongVowels = progress.wrongVowels.toHashSet()
       for (event in update.events) {
+        // The follower numbers each surah's words from 0; shift them into the combined progress.
         when (event) {
           is PhonemeFollower.Event.Recited -> {
-            recited += event.word
-            missed -= event.word
-            if (event.wrongVowels) wrongVowels += event.word else wrongVowels -= event.word
+            val word = base + event.word
+            recited += word
+            missed -= word
+            if (event.wrongVowels) wrongVowels += word else wrongVowels -= word
           }
           is PhonemeFollower.Event.Missed -> {
-            missed += event.word
-            recited -= event.word
-            wrongVowels -= event.word
+            val word = base + event.word
+            missed += word
+            recited -= word
+            wrongVowels -= word
           }
         }
       }
       progress.copy(
-        currentWord = if (update.currentWord >= 0) update.currentWord else progress.currentWord,
+        currentWord = if (update.currentWord >= 0) base + update.currentWord else progress.currentWord,
         recited = recited,
         missed = missed,
         wrongVowels = wrongVowels,

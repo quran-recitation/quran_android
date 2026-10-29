@@ -23,7 +23,6 @@ import com.quran.recitation.tracking.FollowerConfig
 import com.quran.recitation.tracking.PhonemeFollower
 import com.quran.recitation.tracking.RecitationPhonemes
 import com.quran.recitation.tracking.RecitationText
-import com.quran.recitation.tracking.SuraInput
 import com.quran.recitation.tracking.ZipformerModel
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.CancellationException
@@ -238,14 +237,23 @@ class RecitationPresenterImpl @Inject constructor(
 
   /** Starts a session on [start]'s sura; null when its text is not available. */
   private suspend fun newSession(context: Context, start: SuraAyah): MushafRecitationProgress? {
-    val phonemes = RecitationPhonemes.sura(context, start.sura)
+    val (words, pages) = surahContent(context, start.sura) ?: return null
+    val first = words.indexOfFirst { it.word.ayah == start }.coerceAtLeast(0)
+    state.start(MushafRecitationProgress(words, pages, start = first, currentWord = first))
+    eventPresenter.onRecitationSessionChange(MushafSession(start, state))
+    return state.progress.value
+  }
+
+  /** [sura]'s words (phonemes with their mushaf positions) and the page of each; null with no text. */
+  private suspend fun surahContent(context: Context, sura: Int): Pair<List<MushafWord>, List<Int>>? {
+    val phonemes = RecitationPhonemes.sura(context, sura)
     // Mushaf word positions count the ۞ and ۩ marks between words, which are not recited.
-    val positions = recitationText.words(start.sura, 1)
+    val positions = recitationText.words(sura, 1)
       .filter { word -> word.text.any { it in 'ء'..'ي' || it == 'ٱ' } }
       .groupBy({ it.word.ayah.ayah }, { it.word.wordPosition })
     if (phonemes.isEmpty() || positions.isEmpty()) return null
     val words = phonemes.flatMapIndexed { index, ayahPhonemes ->
-      val ayah = SuraAyah(start.sura, index + 1)
+      val ayah = SuraAyah(sura, index + 1)
       val ayahPositions = positions[ayah.ayah].orEmpty()
       ayahPhonemes.mapIndexed { i, phoneme ->
         val position = if (ayahPositions.size == ayahPhonemes.size) ayahPositions[i] else i + 1
@@ -253,10 +261,7 @@ class RecitationPresenterImpl @Inject constructor(
       }
     }
     val pages = words.map { quranInfo.getPageFromSuraAyah(it.word.ayah.sura, it.word.ayah.ayah) }
-    val first = words.indexOfFirst { it.word.ayah == start }.coerceAtLeast(0)
-    state.start(MushafRecitationProgress(words, pages, start = first, currentWord = first))
-    eventPresenter.onRecitationSessionChange(MushafSession(start, state))
-    return state.progress.value
+    return words to pages
   }
 
   private fun listen(
@@ -271,29 +276,23 @@ class RecitationPresenterImpl @Inject constructor(
     listening.start(
       activity, phonemes, ayahs, startWord, openings, from, FollowerConfig(),
     ) { finishedSura ->
-      nextSuraInput(finishedSura)
+      nextSurah(finishedSura)
     }
   }
 
   /**
-   * The sura to carry straight on into once [finishedSura] is done, so the reader is not stopped at
-   * the end of a sura; null at the end of the mushaf or when the sura's text is unavailable, which
-   * stops the session. Starts the next sura's progress and turns the page to it.
+   * The surah to carry straight on into once [finishedSura] is done, so the reader is not stopped
+   * at a surah's end; null at the end of the mushaf or when the surah's text is unavailable, which
+   * stops the session. [MushafListening] appends it to the progress, keeping the finished surah's
+   * colouring.
    */
-  private suspend fun nextSuraInput(finishedSura: Int): SuraInput? {
-    val activity = activity ?: return null
+  private suspend fun nextSurah(finishedSura: Int): NextSurah? {
+    val context = activity ?: return null
     val next = finishedSura + 1
     if (next > LAST_SURA) return null
-    val progress = newSession(activity, SuraAyah(next, 1)) ?: return null
-    eventPresenter.onRecitationChange(SuraAyah(next, 1))
-    val openings = RecitationPhonemes.openings(activity, next)
-    return SuraInput(
-      sura = next,
-      phonemes = progress.words.map { it.phonemes },
-      ayahs = progress.words.map { it.word.ayah.ayah },
-      startWord = 0,
-      openings = openings,
-    )
+    val (words, pages) = surahContent(context, next) ?: return null
+    val openings = RecitationPhonemes.openings(context, next)
+    return NextSurah(next, words, pages, openings)
   }
 
   private fun stopListening() {
