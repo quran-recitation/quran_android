@@ -127,7 +127,11 @@ class RecitationHighlightsPresenterImpl @Inject constructor(
   companion object {
     /** Whether a letter recited with the wrong vowel is shown (cyan). Kept but disabled for now. */
     private const val SHOW_WRONG_VOWELS = false
-    /** An ayah, once fully passed, with at least this fraction of its words missed is wrong (red). */
+    /**
+     * An ayah, once fully passed, with at least this fraction of its words missed is wrong (red).
+     * Matches FollowerConfig.incorrectAyahFraction so the ayah shown red is the one the follower
+     * holds the reader at.
+     */
     private const val INCORRECT_AYAH_FRACTION = 0.30
 
     // Ids after the app's own highlight types (selection, audio, bookmarks, colors, reading bookmarks).

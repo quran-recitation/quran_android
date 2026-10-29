@@ -28,6 +28,12 @@ data class FollowerConfig(
   val minRepeat: Int = 2,
   /** Average cost per phoneme up to which a word counts as recited. */
   val maxWordCost: Double = 0.35,
+  /**
+   * Share of an ayah's words missed at which the ayah counts as wrong (skipped, or recited from
+   * elsewhere): the reader is held there and expected to recite it again. The mushaf shows such an
+   * ayah in red, so this must match the highlights' incorrect-ayah fraction.
+   */
+  val incorrectAyahFraction: Double = 0.30,
 )
 
 /**
@@ -47,10 +53,11 @@ data class FollowerConfig(
  * it, which the reader may already have said.
  *
  * Ayahs must be recited in order: words are marked from the one expected next ([currentWord]) on,
- * as the reader passes it. A slip within an ayah is a missed word, but an ayah left with more than
- * half its words missed (skipped, or recited from somewhere else) is missed from its first missed
- * word on and expected again from there: words after it are followed but not marked until the
- * reader comes back and recites it. So is the rest of an ayah the reader says more than is left of
+ * as the reader passes it. A slip within an ayah is a missed word, but an ayah left with at least
+ * [FollowerConfig.incorrectAyahFraction] of its words missed (skipped, or recited from somewhere
+ * else) is missed from its first missed word on and expected again from there: words after it are
+ * followed but not marked until the reader comes back and recites it. So is the rest of an ayah
+ * the reader says more than is left of
  * without making progress (another passage altogether). Going back to earlier words (repeating)
  * clears nothing; one missed turns recited when said right.
  */
@@ -373,13 +380,13 @@ class PhonemeFollower(
   }
 
   /**
-   * The reader passed the end of the ayah of the words last marked: with more than half of them
-   * missed, it was skipped (or recited from elsewhere), and is expected again from its first
-   * missed word.
+   * The reader passed the end of the ayah of the words last marked: with at least
+   * [FollowerConfig.incorrectAyahFraction] of them missed, it was skipped (or recited from
+   * elsewhere), and is expected again from its first missed word.
    */
   private fun leftAyah() {
     if (passEnd < 0) return
-    if (passMissed * 2 > passWords) {
+    if (passMissed >= passWords * config.incorrectAyahFraction) {
       for (w in passFirstMissed until passEnd) events += Event.Missed(w)
       currentWord = passFirstMissed
       stuck = true // missed already
