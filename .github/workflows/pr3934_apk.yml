@@ -1,0 +1,43 @@
+name: PR3934 APK
+
+# Builds the debug APK of PR quran/quran_android#3934 (offline Memorize + Prayer Corrector) so it
+# can be tested on a device. Mirrors that PR's own CI build steps. On-demand only.
+on:
+  push:
+    branches:
+      - 'test/pr-3934'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build debug APK (PR #3934)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the Code
+        uses: actions/checkout@v7
+
+      - name: Setup JDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version-file: .github/workflows/.java-version
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Fetch native dependencies (sherpa-onnx)
+        run: tools/memorize/fetch_sherpa_onnx.sh
+
+      - name: Build debug APK
+        run: ./gradlew assembleMadaniDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr3934-madani-debug-apk
+          path: app/build/outputs/apk/madani/debug/*.apk
+          retention-days: 14
