@@ -19,7 +19,8 @@ import kotlinx.coroutines.flow.onEach
 /**
  * Shows the recitation session on a mushaf page: recited words turn green, a word slipped within
  * an otherwise-recited ayah orange, and every word of an ayah the reader got wrong (see
- * [incorrectAyahs]) red. The word the reader is on is highlighted, and words not yet recited can
+ * [incorrectAyahs]) red — turning green again word by word as the reader re-recites it. The word
+ * the reader is on is highlighted, and words not yet recited can
  * be hidden (keeping the ayah numbers). Pages taller than the screen scroll to keep the word the
  * reader is on in view. (Vowel-mistake highlighting, cyan, is kept but disabled; see
  * SHOW_WRONG_VOWELS.)
@@ -77,8 +78,14 @@ class RecitationHighlightsPresenterImpl @Inject constructor(
       when {
         // Vowel-mistake (cyan) highlighting is disabled; see SHOW_WRONG_VOWELS.
         SHOW_WRONG_VOWELS && index in progress.wrongVowels -> result += highlight(ayah, position, WRONG_VOWEL)
-        // A whole ayah the reader got wrong is red, every word of it.
-        ayah in incorrectAyahs -> result += highlight(ayah, position, MISSED)
+        // A whole ayah the reader got wrong is red; but the reader is sent back to re-read it, so a
+        // word turns green again once re-recited (passed by the expected word), the word expected
+        // next scrolls into view, and the rest stay red until re-recited.
+        ayah in incorrectAyahs -> result += when {
+          index < progress.currentWord && index in progress.recited -> highlight(ayah, position, RECITED)
+          index == progress.currentWord -> highlight(ayah, position, MISSED, scroll = true)
+          else -> highlight(ayah, position, MISSED)
+        }
         index in progress.recited -> result += highlight(ayah, position, RECITED)
         // A word slipped within an otherwise-recited ayah is orange, not red.
         index in progress.missed -> result += highlight(ayah, position, WRONG_WORD)
