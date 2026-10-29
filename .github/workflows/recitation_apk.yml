@@ -1,8 +1,6 @@
 name: Recitation APK
 on:
-  push:
-    branches:
-      - 'feature/recitation*'
+  # Build on demand only; run it from the Actions tab (Run workflow).
   workflow_dispatch:
 
 concurrency:
